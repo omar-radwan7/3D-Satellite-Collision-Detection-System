@@ -4,6 +4,9 @@
 #include "../scene/SatelliteSystem.h"
 #include "../sim/CollisionDetect.h"
 
+// Forward declaration
+class ConjunctionAnalyzer;
+
 struct SimState {
     float* simTime;
     float* timeScale;
@@ -21,10 +24,9 @@ public:
     ~GuiManager();
 
     void NewFrame();
-    void Render(const SimState& state, const SatelliteSystem& satSys, const ConjunctionManager& colMan);
+    void Render(const SimState& state, const SatelliteSystem& satSys, const ConjunctionManager& colMan, const ConjunctionAnalyzer& conjAnalyzer);
     void RenderDrawData();
 
 private:
     GLFWwindow* window;
 };
-

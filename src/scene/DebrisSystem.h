@@ -2,29 +2,29 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include "../render/Shader.h"
-#include "../render/Buffers.h"
 
-struct Explosion {
+struct Particle {
     glm::vec3 position;
-    float age;
-    float lifetime;
-    float maxScale;
+    glm::vec3 velocity;
+    glm::vec3 color;
+    float size;
+    float life;
+    float maxLife;
 };
 
 class DebrisSystem {
 public:
     DebrisSystem();
     ~DebrisSystem();
-    void update(float deltaTime);
-    void addExplosion(const glm::vec3& position);
-    void draw(const glm::mat4& view, const glm::mat4& projection);
-
-private:
-    std::vector<Explosion> explosions;
-    Shader* shader;
-    unsigned int vao, vbo;
-    int vertexCount;
     
-    void initSpikeMesh();
+    // Updated to accept separate velocities for accurate cloud simulation
+    void addExplosion(glm::vec3 position, glm::vec3 v1, glm::vec3 v2, glm::vec3 color1, glm::vec3 color2);
+    
+    void update(float deltaTime);
+    void draw(const glm::mat4& view, const glm::mat4& projection);
+    
+private:
+    std::vector<Particle> particles;
+    Shader* shader;
+    unsigned int VAO, VBO;
 };
-

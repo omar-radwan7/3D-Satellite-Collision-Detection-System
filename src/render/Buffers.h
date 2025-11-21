@@ -11,33 +11,27 @@ struct Vertex {
 class VBO {
 public:
     unsigned int ID;
-    VBO(const std::vector<Vertex>& vertices);
-    VBO(const std::vector<float>& vertices);
-    ~VBO();
-
-    void bind() const;
-    void unbind() const;
-    void update(const std::vector<float>& vertices);
-};
-
-class EBO {
-public:
-    unsigned int ID;
-    EBO(const std::vector<unsigned int>& indices);
-    ~EBO();
-
-    void bind() const;
-    void unbind() const;
+    VBO(std::vector<Vertex>& vertices);
+    void bind();
+    void unbind();
+    void remove();
 };
 
 class VAO {
 public:
     unsigned int ID;
     VAO();
-    ~VAO();
-
     void linkAttrib(VBO& VBO, unsigned int layout, unsigned int numComponents, GLenum type, GLsizeiptr stride, void* offset);
-    void bind() const;
-    void unbind() const;
+    void bind();
+    void unbind();
+    void remove();
 };
 
+class EBO {
+public:
+    unsigned int ID;
+    EBO(std::vector<unsigned int>& indices);
+    void bind();
+    void unbind();
+    void remove();
+};

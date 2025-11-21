@@ -1,56 +1,96 @@
 #include "CollisionDetect.h"
+#include "../sim/OrbitPropagator.h"
 #include <cmath>
+#include <algorithm>
 #include <iostream>
 
-void ConjunctionManager::update(const std::vector<Satellite>& satellites, float currentTime) {
-    // Naive O(N^2) check. 
-    // For N=2000, 4 million checks. Might be slow for 60FPS.
-    // Optimization: Spatial partitioning (Grid) or just limit N for demo.
-    // We will assume N is small enough or we accept the hit.
-    
-    // Clear old events that are no longer valid? 
-    // Actually, we want to track new conjunctions. 
-    // For simplicity, we rebuild the list every frame or update existing ones.
-    // Let's rebuild.
-    
+void ConjunctionManager::update(const std::vector<Satellite>& satellites, float time) {
     events.clear();
+    predictions.clear();
+    
+    float threshold = 50.0f; // 50 km collision detection zone (increased for testing)
+    
+    for(size_t i=0; i<satellites.size(); ++i) {
+        if(!satellites[i].active) continue; // Skip destroyed satellites
 
-    size_t count = satellites.size();
-    for(size_t i = 0; i < count; ++i) {
-        for(size_t j = i + 1; j < count; ++j) {
-            const Satellite& s1 = satellites[i];
-            const Satellite& s2 = satellites[j];
+        for(size_t j=i+1; j<satellites.size(); ++j) {
+            if(!satellites[j].active) continue; // Skip destroyed satellites
 
-            float dx = s1.position.x - s2.position.x;
-            float dy = s1.position.y - s2.position.y;
-            float dz = s1.position.z - s2.position.z;
-            
-            // Distance squared
-            float distSq = dx*dx + dy*dy + dz*dz;
-            
-            if(distSq < (warningThreshold * warningThreshold)) {
-                float dist = std::sqrt(distSq);
+            float dist = glm::distance(satellites[i].position, satellites[j].position);
+            if(dist < threshold) {
+                // Debug output
+                std::cout << "COLLISION DETECTED: Sat " << satellites[i].id << " <-> Sat " << satellites[j].id 
+                          << " | Distance: " << dist << " km" << std::endl;
                 
-                // Calculate relative velocity (approximate if we don't have velocity vectors populated correctly)
-                // Sat struct has velocity.
-                // But OrbitPropagator might not have updated velocity if we only used simplified position logic.
-                // Let's ensure OrbitPropagator updates velocity or we compute it?
-                // The current OrbitPropagator::Propagate only updates position. 
-                // I should verify this.
+                CollisionEvent ev;
+                ev.sat1_id = satellites[i].id;
+                ev.sat2_id = satellites[j].id;
+                ev.time = time;
+                ev.collisionPoint = (satellites[i].position + satellites[j].position) * 0.5f;
                 
-                ConjunctionEvent event;
-                event.sat1_id = s1.id;
-                event.sat2_id = s2.id;
-                event.time = currentTime;
-                event.distance = dist;
-                event.active = true;
+                // Calculate if satellite will fall to Earth
+                glm::vec3 collisionVelocity = (satellites[i].velocity + satellites[j].velocity) * 0.5f;
+                float altitude = glm::length(ev.collisionPoint);
+                float earthRadius = 6371.0f;
                 
-                // Placeholder for relative velocity
-                event.relativeVelocity = 0.0f; 
+                // Check if debris orbit will decay (simplified: velocity too low for altitude)
+                float orbitalSpeed = glm::length(collisionVelocity);
+                float requiredSpeed = sqrt(398600.4418f / altitude); // Circular orbit speed
                 
-                events.push_back(event);
+                ev.willFallToEarth = (orbitalSpeed < requiredSpeed * 0.9f); // If speed < 90% of orbital speed (more lenient)
+                
+                // ALWAYS show collision warnings (for visualization)
+                // Calculate impact point on Earth
+                ev.impactPointOnEarth = calculateImpactPoint(ev.collisionPoint, collisionVelocity);
+                ev.timeToImpact = (altitude - earthRadius) / std::max(orbitalSpeed * 0.1f, 1.0f); // Time estimate
+                
+                // Create prediction visualization for both satellites
+                CollisionPrediction pred1, pred2;
+                pred1.satelliteId = satellites[i].id;
+                pred1.currentPos = satellites[i].position;
+                pred1.impactPoint = ev.impactPointOnEarth;
+                pred1.timeToImpact = ev.timeToImpact;
+                pred1.isActive = true;
+                
+                pred2.satelliteId = satellites[j].id;
+                pred2.currentPos = satellites[j].position;
+                pred2.impactPoint = ev.impactPointOnEarth;
+                pred2.timeToImpact = ev.timeToImpact;
+                pred2.isActive = true;
+                
+                // Generate trajectory points (collision point -> impact point)
+                int steps = 30;
+                for(int k = 0; k <= steps; ++k) {
+                    float t = (float)k / steps;
+                    glm::vec3 point = glm::mix(ev.collisionPoint, ev.impactPointOnEarth, t);
+                    pred1.trajectoryPoints.push_back(point);
+                    pred2.trajectoryPoints.push_back(point);
+                }
+                
+                predictions.push_back(pred1);
+                predictions.push_back(pred2);
+                
+                std::cout << "  -> Will fall to Earth: " << (ev.willFallToEarth ? "YES" : "NO") 
+                          << " | Impact point: (" << ev.impactPointOnEarth.x << ", " 
+                          << ev.impactPointOnEarth.y << ", " << ev.impactPointOnEarth.z << ")" << std::endl;
+                
+                events.push_back(ev);
             }
         }
     }
 }
 
+glm::vec3 ConjunctionManager::calculateImpactPoint(const glm::vec3& position, const glm::vec3& velocity) {
+    // Simple ballistic trajectory calculation
+    // Project position towards Earth along velocity direction
+    glm::vec3 dir = glm::normalize(position + velocity * 100.0f); // Future position direction
+    float earthRadius = 6371.0f;
+    
+    // Find where this direction intersects Earth surface
+    return dir * earthRadius;
+}
+
+void ConjunctionManager::predictTrajectory(const Satellite& sat, float currentTime) {
+    // This can be expanded for more sophisticated prediction
+    // For now, we do prediction in the update() method
+}

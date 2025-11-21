@@ -20,8 +20,8 @@ void main()
     float diff = max(dot(norm, lightDirection), 0.0);
     vec3 diffuse = diff * texture(albedoMap, TexCoords).rgb;
 
-    // Ambient
-    vec3 ambient = 0.1 * texture(albedoMap, TexCoords).rgb;
+    // Ambient - increased visibility for dark side
+    vec3 ambient = 0.3 * texture(albedoMap, TexCoords).rgb;
 
     // Rim lighting (Atmosphere)
     float rim = 1.0 - max(dot(viewDir, norm), 0.0);

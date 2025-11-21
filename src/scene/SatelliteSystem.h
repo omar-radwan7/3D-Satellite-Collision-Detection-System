@@ -1,45 +1,53 @@
 #pragma once
 #include <vector>
-#include "Satellite.h"
+#include <glm/glm.hpp>
 #include "../render/Shader.h"
 #include "../render/Buffers.h"
-#include <glm/glm.hpp>
 
-struct OrbitLine {
-    unsigned int vao;
-    unsigned int vbo;
-    int vertexCount;
+struct Satellite {
+    int id;
+    std::string name;
+    // Keplerian Elements
+    float semiMajorAxis; // km
+    float eccentricity;
+    float inclination; // radians
+    float raan; // radians
+    float argPeriapsis; // radians
+    float meanAnomaly; // radians at epoch
+    
+    // Calculated state
+    glm::vec3 position;
+    glm::vec3 velocity;
+    glm::vec3 color;
+    
+    bool active = true; // For destroying satellites
 };
 
 class SatelliteSystem {
 public:
     SatelliteSystem();
     ~SatelliteSystem();
-
-    void addSatellite(Satellite sat);
-    void update(float currentTime);
+    
+    void addSatellite(const Satellite& sat);
+    void initOrbits(); // Generate orbit paths
+    
+    void update(float time);
     void drawSatellites(const glm::mat4& view, const glm::mat4& projection);
     void drawOrbits(const glm::mat4& view, const glm::mat4& projection);
     
-    std::vector<Satellite>& getSatellites() { return satellites; }
-
+    void destroySatellite(int id); // Mark as inactive
+    
+    const std::vector<Satellite>& getSatellites() const { return satellites; }
+    
 private:
     std::vector<Satellite> satellites;
-    std::vector<OrbitLine> orbitLines;
-    
-    Shader* satelliteShader;
+    Shader* satShader;
     Shader* orbitShader;
-
-    // For instanced rendering of satellites
-    unsigned int satVAO, satVBO, satEBO;
-    unsigned int instanceVBO; 
-    int sphereIndexCount;
     
-    // Data for instancing
-    std::vector<glm::vec3> instancePositions;
-    std::vector<glm::vec3> instanceColors;
-
-    void initSphereMesh();
-    void generateOrbitLine(const Satellite& sat);
+    unsigned int satVAO, satVBO, satEBO, satInstanceVBO;
+    unsigned int orbitVAO, orbitVBO;
+    int orbitVertexCount = 0;
+    int indexCount = 0;
+    
+    void initRenderData();
 };
-

@@ -12,7 +12,7 @@ public:
     void Draw(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos, const glm::vec3& sunDir);
     
     // Rotation interaction
-    void Rotate(float xoffset, float yoffset);
+    void Rotate(float xoffset, float yoffset, const glm::vec3& camRight, const glm::vec3& camUp);
     void Update(float deltaTime); // Auto-rotation
     
     // Model transform
@@ -27,7 +27,7 @@ private:
     unsigned int normalMap;
     unsigned int indexCount;
     
-    glm::vec2 rotation; // Yaw, Pitch
+    glm::quat orientation; 
     float rotationSpeed = 2.0f; // Degrees per second (Auto-rotation)
 
     void generateSphere(float radius, unsigned int sectorCount, unsigned int stackCount);

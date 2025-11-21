@@ -1,35 +1,38 @@
 #include "Camera.h"
-#include <iostream>
+#include <algorithm>
 
-Camera::Camera(glm::vec3 position, glm::vec3 up, float yaw, float pitch) 
-    : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM) {
+Camera::Camera(glm::vec3 position, glm::vec3 up, float yaw, float pitch)
+    : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+{
     Position = position;
     WorldUp = up;
     Yaw = yaw;
     Pitch = pitch;
-    Distance = glm::length(position - Target);
     updateCameraVectors();
 }
 
-glm::mat4 Camera::GetViewMatrix() {
-    return glm::lookAt(Position, Position + Front, Up);
+glm::mat4 Camera::GetViewMatrix()
+{
+    if (IsOrbiting) {
+        return glm::lookAt(Position, Target, Up);
+    } else {
+        return glm::lookAt(Position, Position + Front, Up);
+    }
 }
 
-void Camera::ProcessKeyboard(Camera_Movement direction, float deltaTime) {
+void Camera::ProcessKeyboard(Camera_Movement direction, float deltaTime)
+{
     float velocity = MovementSpeed * deltaTime;
-    
     if (IsOrbiting) {
-        // In orbit mode, WASD moves the camera in/out (Zoom) or rotates? 
-        // Usually scroll is zoom. WASD could pan? 
-        // Let's make W/S zoom in orbit mode too for accessibility
-        if (direction == FORWARD)
-            Distance -= velocity;
-        if (direction == BACKWARD)
-            Distance += velocity;
-        if (Distance < 0.1f) Distance = 0.1f;
+        // Orbit mode: W/S controls distance
+        if (direction == FORWARD) Distance -= velocity;
+        if (direction == BACKWARD) Distance += velocity;
+        // Zoom limits
+        if (Distance < 1.5f) Distance = 1.5f;
+        if (Distance > 15.0f) Distance = 15.0f;
         updateCameraVectors();
     } else {
-        // Free flight
+        // Free mode
         if (direction == FORWARD)
             Position += Front * velocity;
         if (direction == BACKWARD)
@@ -41,14 +44,16 @@ void Camera::ProcessKeyboard(Camera_Movement direction, float deltaTime) {
     }
 }
 
-void Camera::ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch) {
+void Camera::ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch)
+{
     xoffset *= MouseSensitivity;
     yoffset *= MouseSensitivity;
 
     Yaw   += xoffset;
     Pitch += yoffset;
 
-    if (constrainPitch) {
+    if (constrainPitch)
+    {
         if (Pitch > 89.0f)
             Pitch = 89.0f;
         if (Pitch < -89.0f)
@@ -58,10 +63,13 @@ void Camera::ProcessMouseMovement(float xoffset, float yoffset, GLboolean constr
     updateCameraVectors();
 }
 
-void Camera::ProcessMouseScroll(float yoffset) {
+void Camera::ProcessMouseScroll(float yoffset)
+{
     if (IsOrbiting) {
         Distance -= yoffset * 0.5f;
-        if (Distance < 0.1f) Distance = 0.1f;
+        // Zoom limits: Min 1.5 (close), Max 15.0 (far)
+        if (Distance < 1.5f) Distance = 1.5f;
+        if (Distance > 15.0f) Distance = 15.0f;
         updateCameraVectors();
     } else {
         Zoom -= (float)yoffset;
@@ -72,33 +80,36 @@ void Camera::ProcessMouseScroll(float yoffset) {
     }
 }
 
-void Camera::updateCameraVectors() {
+void Camera::updateCameraVectors()
+{
     if (IsOrbiting) {
-        // Calculate Position based on Angle + Distance around Target
-        // Note: Standard math uses 0 as East, OpenGL 0 Yaw is -Z (North). 
-        // We adjust to match standard orbital feel.
+        // Calculate Position based on Yaw/Pitch and Distance from Target
+        glm::vec3 front;
+        front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+        front.y = sin(glm::radians(Pitch));
+        front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
         
-        float yawRad = glm::radians(Yaw);
-        float pitchRad = glm::radians(Pitch);
-
-        glm::vec3 offset;
-        offset.x = Distance * cos(pitchRad) * cos(yawRad);
-        offset.y = Distance * sin(pitchRad);
-        offset.z = Distance * cos(pitchRad) * sin(yawRad);
+        // In Orbit mode, "Front" points FROM camera TO target.
+        // Actually, standard Euler gives vector pointing AWAY from origin?
+        // Standard: Yaw -90, Pitch 0 -> Front (0,0,-1).
+        // If we want camera to be at Distance, looking at Target.
+        // Position = Target - Front * Distance?
+        // Or Position = Target + Direction * Distance.
+        // Let's assume "Front" is the direction the camera looks.
         
-        Position = Target + offset;
-        Front = glm::normalize(Target - Position);
-    } 
-    else {
-        // FPS Camera: Calculate Front based on Angle
+        Front = glm::normalize(front);
+        Position = Target - Front * Distance;
+        
+        Right = glm::normalize(glm::cross(Front, WorldUp));
+        Up    = glm::normalize(glm::cross(Right, Front));
+    } else {
+        // Free mode
         glm::vec3 front;
         front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
         front.y = sin(glm::radians(Pitch));
         front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
         Front = glm::normalize(front);
+        Right = glm::normalize(glm::cross(Front, WorldUp));
+        Up    = glm::normalize(glm::cross(Right, Front));
     }
-
-    // Recalculate Right and Up
-    Right = glm::normalize(glm::cross(Front, WorldUp)); 
-    Up    = glm::normalize(glm::cross(Right, Front));
 }

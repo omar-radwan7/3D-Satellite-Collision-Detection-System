@@ -1,86 +1,116 @@
 #include "OrbitPropagator.h"
 #include <cmath>
 
-const float MU = 398600.4418f; // Earth's gravitational parameter (km^3/s^2)
-const float PI = 3.14159265359f;
-const float EPSILON = 1e-6f;
+const float MU = 398600.4418f; // Earth gravitational parameter km^3/s^2
 
 void OrbitPropagator::Propagate(Satellite& sat, float time) {
-    // 1. Calculate Mean Anomaly at time t
-    // n = sqrt(mu / a^3)
-    float n = std::sqrt(MU / std::pow(sat.semiMajorAxis, 3.0f));
-    float M = sat.meanAnomaly + n * time;
-
-    // 2. Solve Kepler's Equation for Eccentric Anomaly E: M = E - e*sin(E)
-    float E = M; // Initial guess
-    for (int i = 0; i < 10; ++i) {
-        float f = E - sat.eccentricity * std::sin(E) - M;
-        float df = 1.0f - sat.eccentricity * std::cos(E);
-        float delta = f / df;
-        E -= delta;
-        if (std::abs(delta) < EPSILON) break;
-    }
-
-    // 3. Calculate True Anomaly nu
-    // tan(nu/2) = sqrt((1+e)/(1-e)) * tan(E/2)
-    float sqrtTerm = std::sqrt((1.0f + sat.eccentricity) / (1.0f - sat.eccentricity));
-    float tanNu2 = sqrtTerm * std::tan(E / 2.0f);
-    float nu = 2.0f * std::atan(tanNu2);
-
-    // 4. Calculate radius distance r
-    float r = sat.semiMajorAxis * (1.0f - sat.eccentricity * std::cos(E));
-
-    // 5. Position in orbital plane (PQW frame, but simplified)
-    // P points to periapsis
-    // Q is in orbital plane, 90 deg from P in direction of motion
-    float x_orb = r * std::cos(nu);
-    float y_orb = r * std::sin(nu);
-
-    // 6. Rotate to ECI frame
-    // We need to rotate by -omega (argPeriapsis), -i (inclination), -Omega (RAAN) in reverse order of intrinsic rotations?
-    // Standard conversion:
-    // X = r * (cos(Omega) * cos(omega+nu) - sin(Omega) * sin(omega+nu) * cos(i))
-    // Y = r * (sin(Omega) * cos(omega+nu) + cos(Omega) * sin(omega+nu) * cos(i))
-    // Z = r * (sin(omega+nu) * sin(i))
-    
-    float u = sat.argPeriapsis + nu; // Argument of latitude
-    
-    float cosU = std::cos(u);
-    float sinU = std::sin(u);
-    float cosOm = std::cos(sat.raan);
-    float sinOm = std::sin(sat.raan);
-    float cosI = std::cos(sat.inclination);
-    float sinI = std::sin(sat.inclination);
-
-    sat.position.x = r * (cosOm * cosU - sinOm * sinU * cosI);
-    sat.position.y = r * (sinU * sinI); // Note: Y is up in our OpenGL, but Z is North in ECI usually.
-    sat.position.z = r * (sinOm * cosU + cosOm * sinU * cosI); 
-    
-    // WAIT!
-    // OpenGL: Y is Up.
-    // ECI: Z is North (Up). X is Vernal Equinox. Y is 90 deg East.
-    // So Mapping: ECI(X, Y, Z) -> OpenGL(x, z, -y)? Or just rotate the world.
-    // Let's stick to ECI coordinates in `sat.position` (Z up)
-    // And when rendering, we rotate or map them.
-    // OpenGL Camera usually looks -Z.
-    // Let's map ECI Z -> GL Y. ECI X -> GL X. ECI Y -> GL Z.
-    // So (x, z, y) -> (x, y, z) swap.
-    //
-    // Let's recompute standard ECI (Z up)
-    float X_eci = r * (cosOm * cosU - sinOm * sinU * cosI);
-    float Y_eci = r * (sinOm * cosU + cosOm * sinU * cosI);
-    float Z_eci = r * (sinU * sinI);
-
-    // Map to GL (Y up)
-    sat.position.x = X_eci;
-    sat.position.y = Z_eci;
-    sat.position.z = Y_eci; // Y_eci is usually "Right/East", in GL Z is "Backward".
-                            // Let's assume Earth texture is aligned such that poles are Y.
+    sat.position = CalculatePosition(sat, time);
+    sat.velocity = CalculateVelocity(sat, time);
 }
 
 glm::vec3 OrbitPropagator::CalculatePosition(const Satellite& sat, float time) {
-    Satellite temp = sat;
-    Propagate(temp, time);
-    return temp.position;
+    // Mean Motion
+    float a = sat.semiMajorAxis;
+    float n = sqrt(MU / (a * a * a));
+    
+    // Mean Anomaly at time t
+    float M = sat.meanAnomaly + n * time;
+    
+    // Solve Kepler's Equation for Eccentric Anomaly E: M = E - e*sin(E)
+    float E = M;
+    for(int i=0; i<10; ++i) {
+        E = M + sat.eccentricity * sin(E);
+    }
+    
+    // True Anomaly v
+    float v = 2 * atan(sqrt((1 + sat.eccentricity)/(1 - sat.eccentricity)) * tan(E/2));
+    
+    // Distance r
+    float r = a * (1 - sat.eccentricity * cos(E));
+    
+    // Position in orbital plane
+    float x_orb = r * cos(v);
+    float y_orb = r * sin(v);
+    
+    // Rotate to ECI
+    float O = sat.raan;
+    float w = sat.argPeriapsis;
+    float i = sat.inclination;
+    
+    float x = x_orb * (cos(O)*cos(w) - sin(O)*sin(w)*cos(i)) - y_orb * (cos(O)*sin(w) + sin(O)*cos(w)*cos(i));
+    float y = x_orb * (sin(O)*cos(w) + cos(O)*sin(w)*cos(i)) - y_orb * (sin(O)*sin(w) - cos(O)*cos(w)*cos(i)); // Z-up?
+    // Wait, standard conversion gives Z as axis of rotation for RAAN?
+    // Standard ECI: Z is North.
+    // x = ...
+    // y = ...
+    // z = ...
+    
+    // Let's use standard formulas for Z-up
+    // X = r ( cos(O) cos(w+v) - sin(O) sin(w+v) cos(i) )
+    // Y = r ( sin(O) cos(w+v) + cos(O) sin(w+v) cos(i) )
+    // Z = r ( sin(w+v) sin(i) )
+    
+    float u = w + v; // Argument of latitude
+    float X = r * (cos(O)*cos(u) - sin(O)*sin(u)*cos(i));
+    float Y = r * (sin(O)*cos(u) + cos(O)*sin(u)*cos(i)); // This is Y in ECI (equatorial plane)
+    float Z = r * (sin(u)*sin(i)); // This is Z (North)
+    
+    // BUT our OpenGL world is usually Y-up.
+    // So we map ECI (X, Y, Z) -> OpenGL (X, Z, -Y)? Or (X, Y, Z) if we rotated Earth?
+    // My Earth has poles on local Y.
+    // So I should map ECI Z -> OpenGL Y.
+    // ECI X -> OpenGL X
+    // ECI Y -> OpenGL Z
+    
+    return glm::vec3(X, Z, Y); // Swap Y and Z to match Y-up world
 }
 
+glm::vec3 OrbitPropagator::CalculateVelocity(const Satellite& sat, float time) {
+    // Calculate velocity using orbital mechanics
+    // v = sqrt(μ * (2/r - 1/a))
+    
+    float a = sat.semiMajorAxis;
+    float n = sqrt(MU / (a * a * a));
+    float M = sat.meanAnomaly + n * time;
+    
+    // Solve for E
+    float E = M;
+    for(int i=0; i<10; ++i) {
+        E = M + sat.eccentricity * sin(E);
+    }
+    
+    float v = 2 * atan(sqrt((1 + sat.eccentricity)/(1 - sat.eccentricity)) * tan(E/2));
+    float r = a * (1 - sat.eccentricity * cos(E));
+    
+    // Velocity magnitude
+    float speed = sqrt(MU * (2.0f/r - 1.0f/a));
+    
+    // Velocity direction in orbital plane (perpendicular to position)
+    // In the orbital plane, velocity is tangent to the orbit
+    float vx_orb = -sin(v) * speed / sqrt(1.0f); // Simplified
+    float vy_orb = (sat.eccentricity + cos(v)) * speed / sqrt(1.0f + 2.0f*sat.eccentricity*cos(v) + sat.eccentricity*sat.eccentricity);
+    
+    // More accurate: use specific angular momentum
+    float h = sqrt(MU * a * (1 - sat.eccentricity * sat.eccentricity));
+    vx_orb = -(MU / h) * sin(v);
+    vy_orb = (MU / h) * (sat.eccentricity + cos(v));
+    
+    // Rotate to ECI
+    float O = sat.raan;
+    float w = sat.argPeriapsis;
+    float i = sat.inclination;
+    
+    float cos_w = cos(w);
+    float sin_w = sin(w);
+    float cos_O = cos(O);
+    float sin_O = sin(O);
+    float cos_i = cos(i);
+    float sin_i = sin(i);
+    
+    float vx = vx_orb * (cos_O*cos_w - sin_O*sin_w*cos_i) - vy_orb * (cos_O*sin_w + sin_O*cos_w*cos_i);
+    float vy = vx_orb * (sin_O*cos_w + cos_O*sin_w*cos_i) - vy_orb * (sin_O*sin_w - cos_O*cos_w*cos_i);
+    float vz = vx_orb * (sin_w*sin_i) + vy_orb * (cos_w*sin_i);
+    
+    // Map to OpenGL coordinates (ECI Z -> OpenGL Y)
+    return glm::vec3(vx, vz, vy);
+}

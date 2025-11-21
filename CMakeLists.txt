@@ -1,17 +1,24 @@
-cmake_minimum_required(VERSION 3.16)
-project(SatelliteCollisionSimulator VERSION 1.0.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.10)
+project(SatelliteSim)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Dependencies
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
-find_package(glm REQUIRED)
+find_package(X11 REQUIRED)
 
-# Fetch nlohmann_json
+# ImGui
 include(FetchContent)
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.89
+)
+FetchContent_MakeAvailable(imgui)
+
+# JSON
 FetchContent_Declare(
     json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -19,15 +26,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# Fetch ImGui
-FetchContent_Declare(
-    imgui
-    GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG docking
-)
-FetchContent_MakeAvailable(imgui)
-
-# Fetch stb
+# stb
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
@@ -35,49 +34,38 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
-# Create a library for ImGui to handle the sources
+# ImGui Library
 add_library(imgui_lib
     ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 target_include_directories(imgui_lib PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
-target_link_libraries(imgui_lib PUBLIC glfw GLEW::GLEW OpenGL::GL X11)
+target_link_libraries(imgui_lib glfw OpenGL::GL)
 
-# Main executable
-add_executable(SatelliteSim
-    src/app/main.cpp
-    src/render/Shader.cpp
-    src/render/Buffers.cpp
-    src/render/Camera.cpp
-    src/scene/Earth.cpp
-    src/scene/SatelliteSystem.cpp
-    src/scene/DebrisSystem.cpp
-    src/sim/OrbitPropagator.cpp
-    src/sim/CollisionDetect.cpp
-    src/ui/GuiManager.cpp
-    src/util/TextureLoader.cpp
-    src/util/ConfigLoader.cpp
-)
+# Sources
+file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-target_include_directories(SatelliteSim PRIVATE
-    src
+# Executable
+add_executable(SatelliteSim ${SOURCES})
+
+target_include_directories(SatelliteSim PUBLIC 
+    src 
     ${stb_SOURCE_DIR}
+    ${json_SOURCE_DIR}/include
 )
 
-target_link_libraries(SatelliteSim PRIVATE
-    glfw
-    GLEW::GLEW
-    OpenGL::GL
-    glm::glm
-    nlohmann_json::nlohmann_json
+target_link_libraries(SatelliteSim 
+    PRIVATE 
     imgui_lib
+    GLEW::GLEW
+    glfw
+    OpenGL::GL
+    X11
+    nlohmann_json::nlohmann_json
 )
 
-# Copy assets to build directory
-file(COPY ${CMAKE_SOURCE_DIR}/assets DESTINATION ${CMAKE_BINARY_DIR})
-file(COPY ${CMAKE_SOURCE_DIR}/shaders DESTINATION ${CMAKE_BINARY_DIR})

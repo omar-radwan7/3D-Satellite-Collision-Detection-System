@@ -1,27 +1,37 @@
 #pragma once
 #include <vector>
-#include "../scene/Satellite.h"
+#include <glm/glm.hpp>
+#include "../scene/SatelliteSystem.h"
 
-struct ConjunctionEvent {
+struct CollisionEvent {
     int sat1_id;
     int sat2_id;
     float time;
-    float distance; // km
-    float relativeVelocity; // km/s
-    bool active;
+    glm::vec3 collisionPoint;
+    glm::vec3 impactPointOnEarth;
+    float timeToImpact;
+    bool willFallToEarth;
+};
+
+struct CollisionPrediction {
+    int satelliteId;
+    glm::vec3 currentPos;
+    std::vector<glm::vec3> trajectoryPoints; // Path from current position to impact
+    glm::vec3 impactPoint;
+    float timeToImpact;
+    bool isActive;
 };
 
 class ConjunctionManager {
 public:
-    void update(const std::vector<Satellite>& satellites, float currentTime);
-    const std::vector<ConjunctionEvent>& getEvents() const { return events; }
-    void clearEvents() { events.clear(); }
-
+    void update(const std::vector<Satellite>& satellites, float time);
+    const std::vector<CollisionEvent>& getEvents() const { return events; }
+    const std::vector<CollisionPrediction>& getPredictions() const { return predictions; }
+    
 private:
-    std::vector<ConjunctionEvent> events;
-    // Threshold in km. Real conjunctions are < 1km, but for visual demo we use larger.
-    // Earth Radius ~6371km.
-    // Let's use 200km for "warning" visualization.
-    float warningThreshold = 200.0f; 
+    std::vector<CollisionEvent> events;
+    std::vector<CollisionPrediction> predictions;
+    
+    void predictTrajectory(const Satellite& sat, float currentTime);
+    glm::vec3 calculateImpactPoint(const glm::vec3& position, const glm::vec3& velocity);
 };
-

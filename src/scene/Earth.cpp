@@ -3,19 +3,19 @@
 #include <cmath>
 #include <iostream>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 const float PI = 3.14159265359f;
 
-Earth::Earth() : rotation(0.0f) {
+Earth::Earth() {
     shader = new Shader("shaders/earth.vert", "shaders/earth.frag");
     
     // Load textures
-    // Note: Ensure you have replaced these files with your new high-res texture!
     albedoMap = TextureLoader::LoadTexture("assets/textures/earth_albedo.jpg");
     normalMap = TextureLoader::LoadTexture("assets/textures/earth_normal.jpg");
 
-    // Start with a nice angle (Africa/Europe visible)
-    rotation.x = 180.0f; 
+    // Initialize with 0 rotation (facing Prime Meridian if texture is standard)
+    orientation = glm::angleAxis(glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
     generateSphere(1.0f, 64, 64);
 }
@@ -27,46 +27,39 @@ Earth::~Earth() {
     delete shader;
 }
 
-void Earth::Rotate(float xoffset, float yoffset) {
-    rotation.x += xoffset;
-    rotation.y += yoffset;
-    
-    // Clamp pitch
-    if (rotation.y > 89.0f) rotation.y = 89.0f;
-    if (rotation.y < -89.0f) rotation.y = -89.0f;
+void Earth::Rotate(float xoffset, float yoffset, const glm::vec3& camRight, const glm::vec3& camUp) {
+    float sensitivity = 0.5f; 
+    float angleX = glm::radians(xoffset * sensitivity);
+    float angleY = glm::radians(yoffset * sensitivity);
+
+    // Dragging X (left/right) rotates around Camera Up
+    // Dragging Y (up/down) rotates around Camera Right
+    // We invert X dragging to make it feel like pulling the surface
+    glm::quat qY = glm::angleAxis(-angleX, camUp);
+    glm::quat qX = glm::angleAxis(angleY, camRight);
+
+    orientation = qY * qX * orientation;
+    orientation = glm::normalize(orientation);
 }
 
 void Earth::Update(float deltaTime) {
-    // Auto-rotate Earth (Day/Night cycle simulation)
-    // Google Earth idle spin is usually slow to the left (Eastward rotation)
-    // Earth rotates 360 deg in 24h. We want it faster for demo.
-    // 2 degrees per second is a nice slow drift.
-    rotation.x += rotationSpeed * deltaTime;
-    if (rotation.x > 360.0f) rotation.x -= 360.0f;
+    // Auto-rotate around Earth's LOCAL Y axis (poles)
+    glm::quat spin = glm::angleAxis(glm::radians(rotationSpeed * deltaTime), glm::vec3(0.0f, 1.0f, 0.0f));
+    orientation = orientation * spin;
+    orientation = glm::normalize(orientation);
 }
 
 glm::mat4 Earth::getModelMatrix() const {
-    glm::mat4 model = glm::mat4(1.0f);
-    // Apply rotation (Yaw and Pitch)
-    // Order: Rotate around Y (Spin), then X (Tilt if dragged)
-    // Actually, for "Google Earth" feel, you usually want to spin around the POLE (Y axis in local space).
-    
-    model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(1.0f, 0.0f, 0.0f)); // Pitch
-    model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(0.0f, 1.0f, 0.0f)); // Yaw
-    
-    // Optional: Add Earth's axial tilt (23.5 deg)
-    // model = glm::rotate(model, glm::radians(23.5f), glm::vec3(0.0f, 0.0f, 1.0f));
-    
-    return model;
+    return glm::mat4_cast(orientation);
 }
 
 void Earth::generateSphere(float radius, unsigned int sectorCount, unsigned int stackCount) {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
 
-    float x, y, z, xy;                              // vertex position
-    float nx, ny, nz, lengthInv = 1.0f / radius;    // vertex normal
-    float s, t;                                     // vertex texCoord
+    float x, y, z, xy;                              
+    float nx, ny, nz, lengthInv = 1.0f / radius;    
+    float s, t;                                     
 
     float sectorStep = 2 * PI / sectorCount;
     float stackStep = PI / stackCount;
@@ -74,23 +67,23 @@ void Earth::generateSphere(float radius, unsigned int sectorCount, unsigned int 
 
     for(unsigned int i = 0; i <= stackCount; ++i)
     {
-        stackAngle = PI / 2 - i * stackStep;        // starting from pi/2 to -pi/2
-        xy = radius * cosf(stackAngle);             // r * cos(u)
-        z = radius * sinf(stackAngle);              // r * sin(u)
+        stackAngle = PI / 2 - i * stackStep;        // pi/2 to -pi/2
+        xy = radius * cosf(stackAngle);             
+        y = radius * sinf(stackAngle);              // Y is UP
 
         for(unsigned int j = 0; j <= sectorCount; ++j)
         {
-            sectorAngle = j * sectorStep;           // starting from 0 to 2pi
+            sectorAngle = j * sectorStep;           // 0 to 2pi
 
-            x = xy * cosf(sectorAngle);             // r * cos(u) * cos(v)
-            y = xy * sinf(sectorAngle);             // r * cos(u) * sin(v)
+            x = xy * cosf(sectorAngle);             
+            z = xy * sinf(sectorAngle);             
             
             nx = x * lengthInv;
             ny = y * lengthInv;
             nz = z * lengthInv;
 
-            s = (float)j / sectorCount;
-            t = (float)i / stackCount;
+            s = 1.0f - (float)j / sectorCount;
+            t = 1.0f - (float)i / stackCount; // V=1 at top (North), V=0 at bottom
 
             Vertex v;
             v.position[0] = x;
@@ -101,7 +94,7 @@ void Earth::generateSphere(float radius, unsigned int sectorCount, unsigned int 
             v.normal[1] = ny;
             v.normal[2] = nz;
 
-            v.texCoords[0] = s; // standard mapping
+            v.texCoords[0] = s;
             v.texCoords[1] = t;
             
             vertices.push_back(v);
@@ -111,8 +104,8 @@ void Earth::generateSphere(float radius, unsigned int sectorCount, unsigned int 
     unsigned int k1, k2;
     for(unsigned int i = 0; i < stackCount; ++i)
     {
-        k1 = i * (sectorCount + 1);     // beginning of current stack
-        k2 = k1 + sectorCount + 1;      // beginning of next stack
+        k1 = i * (sectorCount + 1);     
+        k2 = k1 + sectorCount + 1;      
 
         for(unsigned int j = 0; j < sectorCount; ++j, ++k1, ++k2)
         {
