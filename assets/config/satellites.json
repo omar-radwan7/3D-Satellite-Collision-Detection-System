@@ -1,0 +1,38 @@
+{
+  "satellites": [
+    {
+      "id": 1,
+      "name": "ISS",
+      "semiMajorAxis": 6771.0,
+      "eccentricity": 0.0004,
+      "inclination": 51.64,
+      "raan": 0.0,
+      "argPeriapsis": 0.0,
+      "meanAnomaly": 0.0,
+      "color": [1.0, 1.0, 1.0]
+    },
+    {
+      "id": 2,
+      "name": "Hubble",
+      "semiMajorAxis": 6911.0,
+      "eccentricity": 0.0002,
+      "inclination": 28.47,
+      "raan": 45.0,
+      "argPeriapsis": 10.0,
+      "meanAnomaly": 180.0,
+      "color": [0.5, 0.5, 1.0]
+    },
+    {
+      "id": 3,
+      "name": "GPS-IIR-1",
+      "semiMajorAxis": 26560.0,
+      "eccentricity": 0.01,
+      "inclination": 55.0,
+      "raan": 90.0,
+      "argPeriapsis": 0.0,
+      "meanAnomaly": 0.0,
+      "color": [0.2, 1.0, 0.2]
+    }
+  ]
+}
+
