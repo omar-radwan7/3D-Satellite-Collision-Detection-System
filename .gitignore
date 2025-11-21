@@ -1,1 +1,33 @@
+ Build directories
 build/
+*.o
+*.a
+*.so
+*.exe
+SatelliteSim
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Dependencies (fetched by CMake)
+_deps/
+
+# Runtime files
+imgui.ini
+trace.log
+
+# OS
+.DS_Store
+Thumbs.db
